@@ -1,0 +1,129 @@
+networks:
+  ecommerce_network:
+    driver: bridge
+
+services:
+
+  # ── INFRASTRUCTURE ──────────────────────────────────────
+
+  postgres-users:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: users_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_users_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce_network
+
+  postgres-products:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: products_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_products_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce_network
+
+  postgres-orders:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_orders_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce_network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    ports:
+      - "15672:15672"   # Management UI
+      - "5672:5672"     # AMQP port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: secret
+    networks:
+      - ecommerce_network
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - ecommerce_network
+
+  # ── SERVICES ─────────────────────────────────────────────
+
+  user-service:
+    build: ./services/user-service
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./services/user-service:/app
+    environment:
+      DATABASE_URL: postgresql://postgres:secret@postgres-users:5432/users_db
+      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-key-change-in-prod
+      JWT_SECRET: jwt-super-secret
+    depends_on:
+      - postgres-users
+      - rabbitmq
+      - redis
+    networks:
+      - ecommerce_network
+
+  product-service:
+    build: ./services/product-service
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./services/product-service:/app
+    environment:
+      DATABASE_URL: postgresql://postgres:secret@postgres-products:5432/products_db
+      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
+      USER_SERVICE_URL: http://user-service:8000
+      JWT_SECRET: jwt-super-secret
+    depends_on:
+      - postgres-products
+      - rabbitmq
+    networks:
+      - ecommerce_network
+
+  order-service:
+    build: ./services/order-service
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./services/order-service:/app
+    environment:
+      DATABASE_URL: postgresql://postgres:secret@postgres-orders:5432/orders_db
+      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
+      PRODUCT_SERVICE_URL: http://product-service:8000
+      USER_SERVICE_URL: http://user-service:8000
+      JWT_SECRET: jwt-super-secret
+    depends_on:
+      - postgres-orders
+      - rabbitmq
+    networks:
+      - ecommerce_network
+
+  # ── API GATEWAY ───────────────────────────────────────────
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce_network
+
+volumes:
+  postgres_users_data:
+  postgres_products_data:
+  postgres_orders_data:
