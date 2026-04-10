@@ -4,122 +4,191 @@ networks:
 
 services:
 
-  # ── INFRASTRUCTURE ──────────────────────────────────────
+  # INFRASTRUCTURE
 
-  postgres-users:
+  postgres_users:
+    container_name: postgres_users
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: users_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${USER_DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_users_data:/var/lib/postgresql/data
     networks:
       - ecommerce_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${USER_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  postgres-products:
-    image: postgres:15-alpine
+  postgres_products:
+    container_name: postgres_products
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: products_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${PRODUCT_DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_products_data:/var/lib/postgresql/data
     networks:
       - ecommerce_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${PRODUCT_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  postgres-orders:
-    image: postgres:15-alpine
+  postgres_orders:
+    container_name: postgres_orders
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: orders_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${ORDER_DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_orders_data:/var/lib/postgresql/data
     networks:
       - ecommerce_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${ORDER_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   rabbitmq:
-    image: rabbitmq:3.12-management-alpine
+    container_name: rabbitmq
+    image: rabbitmq:3.13-management-alpine
     ports:
-      - "15672:15672"   # Management UI
-      - "5672:5672"     # AMQP port
+      - "15672:15672"
+      - "5672:5672"
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: secret
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     networks:
       - ecommerce_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
+    container_name: redis
     image: redis:7-alpine
     networks:
       - ecommerce_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # ── SERVICES ─────────────────────────────────────────────
+  # SERVICES
 
-  user-service:
+  user_service:
+    container_name: user_service
     build: ./services/user-service
-    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./services/user-service:/app
+    ports:
+      - "8001:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:secret@postgres-users:5432/users_db
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: dev-secret-key-change-in-prod
-      JWT_SECRET: jwt-super-secret
+      DATABASE_URL: ${USER_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      DEBUG: ${DEBUG}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL}
+      SERVICE_REQUEST_TIMEOUT: ${SERVICE_REQUEST_TIMEOUT}
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL}
     depends_on:
-      - postgres-users
-      - rabbitmq
-      - redis
+      postgres_users:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - ecommerce_network
 
-  product-service:
+  product_service:
+    container_name: product_service
     build: ./services/product-service
-    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./services/product-service:/app
+    ports:
+      - "8002:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:secret@postgres-products:5432/products_db
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
-      USER_SERVICE_URL: http://user-service:8000
-      JWT_SECRET: jwt-super-secret
+      DATABASE_URL: ${PRODUCT_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      DEBUG: ${DEBUG}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL}
+      SERVICE_REQUEST_TIMEOUT: ${SERVICE_REQUEST_TIMEOUT}
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL}
     depends_on:
-      - postgres-products
-      - rabbitmq
+      postgres_products:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - ecommerce_network
 
-  order-service:
+  order_service:
+    container_name: order_service
     build: ./services/order-service
-    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./services/order-service:/app
+    ports:
+      - "8003:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:secret@postgres-orders:5432/orders_db
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672/
-      PRODUCT_SERVICE_URL: http://product-service:8000
-      USER_SERVICE_URL: http://user-service:8000
-      JWT_SECRET: jwt-super-secret
+      DATABASE_URL: ${ORDER_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      DEBUG: ${DEBUG}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL}
+      SERVICE_REQUEST_TIMEOUT: ${SERVICE_REQUEST_TIMEOUT}
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL}
     depends_on:
-      - postgres-orders
-      - rabbitmq
+      postgres_orders:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - ecommerce_network
 
-  # ── API GATEWAY ───────────────────────────────────────────
+  # API GATEWAY
 
   nginx:
+    container_name: nginx
     image: nginx:alpine
     ports:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - user-service
-      - product-service
-      - order-service
+      - user_service
+      - product_service
+      - order_service
     networks:
       - ecommerce_network
 

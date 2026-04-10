@@ -1,3 +1,5 @@
+# product_service/settings.py
+
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -11,18 +13,21 @@ DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 ALLOWED_HOSTS = [host for host in os.environ.get("ALLOWED_HOSTS", "*").split(",") if host]
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "django.contrib.staticfiles", 
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-    "_service.apps.orders.apps.OrdersConfig",
+    "product_service.apps.products",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -31,9 +36,30 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
 
-ROOT_URLCONF = "order_service.urls"
-WSGI_APPLICATION = "order_service.wsgi.application"
-ASGI_APPLICATION = "order_service.asgi.application"
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+ROOT_URLCONF = "product_service.urls"
+WSGI_APPLICATION = "product_service.wsgi.application"
+ASGI_APPLICATION = "product_service.asgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
@@ -68,7 +94,10 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://admin:secret@localhost:5672/")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "internal-dev-secret")
 PRODUCT_SERVICE_URL = os.environ.get("PRODUCT_SERVICE_URL", "http://localhost:8000")
 USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://localhost:8000")
+ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://localhost:8000")
 SERVICE_REQUEST_TIMEOUT = int(os.environ.get("SERVICE_REQUEST_TIMEOUT", "5"))
