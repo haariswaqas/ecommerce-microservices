@@ -89,6 +89,8 @@ services:
 
   user_service:
     container_name: user_service
+    hostname: user-service
+
     build: ./services/user-service
     volumes:
       - ./services/user-service:/app
@@ -120,6 +122,7 @@ services:
 
   product_service:
     container_name: product_service
+    hostname: product-service
     build: ./services/product-service
     volumes:
       - ./services/product-service:/app
@@ -149,6 +152,8 @@ services:
 
   order_service:
     container_name: order_service
+    hostname: order-service
+
     build: ./services/order-service
     volumes:
       - ./services/order-service:/app

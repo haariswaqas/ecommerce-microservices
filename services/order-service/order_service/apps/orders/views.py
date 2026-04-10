@@ -1,3 +1,6 @@
+# order_service/apps/orders/views.py
+import hmac
+
 import requests
 from django.conf import settings
 from django.db import transaction
@@ -7,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Order
+from .permissions import OrderAccessPermission, _get_seller_product_ids, get_role
 from .serializers import OrderCreateSerializer, OrderSerializer
 
 
@@ -15,15 +19,27 @@ class StockReservationError(Exception):
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [OrderAccessPermission]
     http_method_names = ["get", "post", "head", "options"]
-    queryset = Order.objects.prefetch_related("items").all()
 
     def get_queryset(self):
         base_queryset = Order.objects.prefetch_related("items")
-        if self.request.user and self.request.user.is_staff:
+
+        if self.request.user.is_staff:
             return base_queryset
-        return base_queryset.filter(user_id=self.request.user.id)
+
+        role = get_role(self.request)
+
+        if role == 'customer':
+            return base_queryset.filter(user_id=self.request.user.id)
+
+        if role == 'seller':
+            seller_product_ids = _get_seller_product_ids(str(self.request.user.id))
+            return base_queryset.filter(
+                items__product_id__in=seller_product_ids
+            ).distinct()
+
+        return Order.objects.none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -59,6 +75,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         order = self.get_object()
+
         if order.status not in [Order.Status.PENDING, Order.Status.CONFIRMED]:
             return Response(
                 {"detail": f"Order in '{order.status}' status cannot be cancelled."},
@@ -74,10 +91,10 @@ class OrderViewSet(viewsets.ModelViewSet):
             self._reserve_product_stock(item.product_id, item.quantity)
 
     def _reserve_product_stock(self, product_id, quantity):
-        headers = {}
-        auth_header = self.request.headers.get("Authorization")
-        if auth_header:
-            headers["Authorization"] = auth_header
+        headers = {
+            "X-Internal-Secret": settings.INTERNAL_SECRET,
+            "Content-Type": "application/json",
+        }
 
         last_error = None
         for reserve_url in self._build_reservation_urls(product_id):
@@ -96,7 +113,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 return
 
             if response.status_code == status.HTTP_404_NOT_FOUND:
-                last_error = f"Reserve endpoint was not found at {reserve_url}."
+                last_error = f"Reserve endpoint not found at {reserve_url}."
                 continue
 
             message = self._extract_error_message(response)
@@ -110,10 +127,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def _build_reservation_urls(self, product_id):
         base_url = settings.PRODUCT_SERVICE_URL.rstrip("/")
-        return [
-            f"{base_url}/products/{product_id}/reserve_stock/",
-            f"{base_url}/api/products/{product_id}/reserve_stock/",
-        ]
+        return [f"{base_url}/api/products/products/{product_id}/reserve_stock/"]
 
     @staticmethod
     def _extract_error_message(response):
@@ -135,7 +149,7 @@ class InternalOrderView(APIView):
 
     def get(self, request, order_id):
         secret = request.headers.get("X-Internal-Secret")
-        if secret != settings.INTERNAL_SECRET:
+        if not hmac.compare_digest(secret or '', settings.INTERNAL_SECRET):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
         try:

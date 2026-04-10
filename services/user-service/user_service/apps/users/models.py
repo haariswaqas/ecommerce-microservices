@@ -3,6 +3,14 @@ from django.db import models
 import uuid
 
 class User(AbstractUser):
+    
+    CUSTOMER = 'customer'
+    SELLER = 'seller'
+    
+    ROLE_CHOICES = [
+        (CUSTOMER, 'Customer'),
+        (SELLER, 'Seller'),
+    ]
     # Use UUID as PK — safer across services than integer IDs
     id = models.UUIDField(
         primary_key=True,
@@ -13,6 +21,8 @@ class User(AbstractUser):
     last_name = models.CharField(max_length=30)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=CUSTOMER, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

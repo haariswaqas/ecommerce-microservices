@@ -21,7 +21,7 @@ class Order(models.Model):
         default=Status.PENDING,
         db_index=True,
     )
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), blank=True)
     shipping_address = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     failure_reason = models.TextField(blank=True)
@@ -44,7 +44,7 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(
         max_digits=10,
-        decimal_places=2,
+        decimal_places=2, blank=True,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
     line_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))

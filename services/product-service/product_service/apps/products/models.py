@@ -1,18 +1,26 @@
 from django.db import models
 import uuid
 
-class Category(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100)
-    slug = models.SlugField(unique=True)
 
-    class Meta:
-        db_table = 'categories'
-        verbose_name_plural = 'categories'
 
 class Product(models.Model):
+    
+    ELECTRONICS = 'electronics'
+    CLOTHING = 'clothing'
+    HOME = 'home'
+    BOOKS = 'books'
+    TOYS = 'toys'
+    
+    
+    CATEGORY_CHOICES = [
+        ('electronics', 'Electronics'),
+        ('clothing', 'Clothing'),
+        ('home', 'Home & Kitchen'),
+        ('books', 'Books'),
+        ('toys', 'Toys & Games'),
+    ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, null=True, blank=True, default=ELECTRONICS)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
